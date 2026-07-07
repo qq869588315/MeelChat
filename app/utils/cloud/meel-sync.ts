@@ -17,14 +17,62 @@ type MeelSyncResponse =
 
 const DEFAULT_MEEL_SYNC_ENDPOINT = "/api/meel-sync/state";
 
-function normalizeEndpoint(endpoint: string) {
-  return endpoint.trim() || DEFAULT_MEEL_SYNC_ENDPOINT;
+export function normalizeMeelSyncEndpoint(endpoint: string) {
+  const trimmed = endpoint.trim();
+
+  if (!trimmed || trimmed === "/") {
+    return DEFAULT_MEEL_SYNC_ENDPOINT;
+  }
+
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed)) {
+    const url = new URL(trimmed);
+    if (!url.pathname || url.pathname === "/") {
+      url.pathname = DEFAULT_MEEL_SYNC_ENDPOINT;
+      url.search = "";
+      url.hash = "";
+    }
+    return url.toString();
+  }
+
+  const firstSegment = trimmed.split("/")[0];
+  const looksLikeHost =
+    firstSegment.includes(".") ||
+    firstSegment.includes(":") ||
+    firstSegment === "localhost";
+
+  if (looksLikeHost) {
+    const protocol =
+      firstSegment === "localhost" ||
+      firstSegment.startsWith("127.") ||
+      firstSegment.startsWith("0.0.0.0")
+        ? "http"
+        : "https";
+    const url = new URL(`${protocol}://${trimmed}`);
+    if (!url.pathname || url.pathname === "/") {
+      url.pathname = DEFAULT_MEEL_SYNC_ENDPOINT;
+      url.search = "";
+      url.hash = "";
+    }
+    return url.toString();
+  }
+
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
 async function readMeelSyncResponse(res: Response) {
-  const data = (await res.json()) as MeelSyncResponse;
+  let data: MeelSyncResponse;
 
-  if (!res.ok || !data.ok) {
+  try {
+    data = (await res.json()) as MeelSyncResponse;
+  } catch {
+    throw new Error("invalid_sync_endpoint");
+  }
+
+  if (!data || typeof data !== "object" || !("ok" in data)) {
+    throw new Error("invalid_sync_endpoint");
+  }
+
+  if (!res.ok || data.ok !== true) {
     const error = data.ok ? "sync_failed" : data.error;
     throw new Error(error || "sync_failed");
   }
@@ -46,7 +94,8 @@ export function createMeelSyncClient(store: SyncStore) {
           method: "GET",
           headers: this.headers(),
         });
-        return res.ok;
+        await readMeelSyncResponse(res);
+        return true;
       } catch {
         return false;
       }
@@ -87,7 +136,7 @@ export function createMeelSyncClient(store: SyncStore) {
     },
 
     path() {
-      return normalizeEndpoint(config.endpoint);
+      return normalizeMeelSyncEndpoint(config.endpoint);
     },
   };
 }
