@@ -35,6 +35,16 @@ const en: LocaleType = {
   },
   Chat: {
     SubTitle: (count: number) => `${count} messages`,
+    SyncStatus: {
+      Unconfigured: "Sync not configured",
+      Pulling: "Pulling...",
+      Pushing: "Uploading...",
+      Synced: (time: string) => `Synced ${time}`,
+      Dirty: "Local changes waiting to upload",
+      Error: "Sync failed, click to retry",
+      Offline: "Offline, will retry later",
+      Idle: "Sync idle",
+    },
     EditMessage: {
       Title: "Edit All Messages",
       Topic: {
@@ -258,11 +268,21 @@ const en: LocaleType = {
           UserName: "Backup Name",
           Password: "UpStash Redis REST Token",
         },
+
+        Meel: {
+          Endpoint: "Meel Sync Endpoint",
+          EndpointSubTitle: "Defaults to /api/meel-sync/state on this site",
+          Token: "Sync Token",
+          TokenSubTitle: "A separate token for each user; do not share it",
+          AutoSync: "Auto Sync",
+          AutoSyncSubTitle:
+            "Sync automatically after app open, AI replies, and local edits",
+        },
       },
 
       LocalState: "Local Data",
       Overview: (overview: any) => {
-        return `${overview.chat} chats，${overview.message} messages，${overview.prompt} prompts，${overview.mask} masks`;
+        return `${overview.chat} chats, ${overview.message} messages`;
       },
       ImportFailed: "Failed to import from file",
     },
@@ -521,6 +541,16 @@ const en: LocaleType = {
       CustomModel: {
         Title: "Custom Models",
         SubTitle: "Custom model options, seperated by comma",
+        Fetch: "Fetch models",
+        Fetching: "Fetching...",
+        FetchSuccess: (count: number) => `Fetched ${count} models`,
+        FetchFailed: (message: string) => `Failed to fetch models: ${message}`,
+        FetchEmpty: "Endpoint connected, but no models were returned",
+        FetchNeedUrl: "Please enter the endpoint URL first",
+        FetchNeedApiKey: "Please enter the API Key first",
+        FetchOpenAIOnly:
+          "Fetching model lists currently supports OpenAI-compatible endpoints only",
+        FetchUnknownError: "Unknown error",
       },
       Google: {
         ApiKey: {

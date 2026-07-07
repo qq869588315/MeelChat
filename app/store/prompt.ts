@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { StoreKey } from "../constant";
 import { getLang } from "../locales";
 import { createPersistStore } from "../utils/store";
+import { markMeelSyncDirty } from "../utils/meel-sync/events";
 
 export interface Prompt {
   id: string;
@@ -65,6 +66,7 @@ export const usePromptStore = createPersistStore(
       set(() => ({
         prompts: prompts,
       }));
+      markMeelSyncDirty();
 
       return prompt.id!;
     },
@@ -97,6 +99,7 @@ export const usePromptStore = createPersistStore(
         prompts,
         counter: get().counter + 1,
       }));
+      markMeelSyncDirty();
     },
 
     getUserPrompts() {
@@ -120,6 +123,7 @@ export const usePromptStore = createPersistStore(
       prompts[id] = prompt;
       set(() => ({ prompts }));
       SearchService.add(prompt);
+      markMeelSyncDirty();
     },
 
     search(text: string) {

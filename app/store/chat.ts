@@ -38,6 +38,7 @@ import { collectModelsWithDefaultModel } from "../utils/model";
 import { createEmptyMask, Mask } from "./mask";
 import { executeMcpAction, getAllTools, isMcpEnabled } from "../mcp/actions";
 import { extractMcpJson, isMcpJson } from "../mcp/utils";
+import { markMeelSyncDirty, pushMeelSyncNow } from "../utils/meel-sync/events";
 
 const localStorage = safeLocalStorage();
 
@@ -264,6 +265,7 @@ export const useChatStore = createPersistStore(
           currentSessionIndex: 0,
           sessions: [newSession, ...state.sessions],
         }));
+        markMeelSyncDirty();
       },
 
       clearSessions() {
@@ -271,6 +273,7 @@ export const useChatStore = createPersistStore(
           sessions: [createEmptySession()],
           currentSessionIndex: 0,
         }));
+        markMeelSyncDirty();
       },
 
       selectSession(index: number) {
@@ -302,6 +305,7 @@ export const useChatStore = createPersistStore(
             sessions: newSessions,
           };
         });
+        markMeelSyncDirty();
       },
 
       newSession(mask?: Mask) {
@@ -325,6 +329,7 @@ export const useChatStore = createPersistStore(
           currentSessionIndex: 0,
           sessions: [session].concat(state.sessions),
         }));
+        markMeelSyncDirty();
       },
 
       nextSession(delta: number) {
@@ -364,6 +369,7 @@ export const useChatStore = createPersistStore(
           currentSessionIndex: nextIndex,
           sessions,
         }));
+        markMeelSyncDirty();
 
         showToast(
           Locale.Home.DeleteToast,
@@ -371,6 +377,7 @@ export const useChatStore = createPersistStore(
             text: Locale.Home.Revert,
             onClick() {
               set(() => restoreState);
+              markMeelSyncDirty();
             },
           },
           5000,
@@ -478,6 +485,7 @@ export const useChatStore = createPersistStore(
               get().onNewMessage(botMessage, session);
             }
             ChatControllerPool.remove(session.id, botMessage.id);
+            pushMeelSyncNow();
           },
           onBeforeTool(tool: ChatMessageTool) {
             (botMessage.tools = botMessage?.tools || []).push(tool);
@@ -515,6 +523,7 @@ export const useChatStore = createPersistStore(
             );
 
             console.error("[Chat] failed ", error);
+            pushMeelSyncNow();
           },
           onController(controller) {
             // collect controller for stop/retry
@@ -649,6 +658,7 @@ export const useChatStore = createPersistStore(
         const messages = session?.messages;
         updater(messages?.at(messageIndex));
         set(() => ({ sessions }));
+        markMeelSyncDirty();
       },
 
       resetSession(session: ChatSession) {
@@ -656,6 +666,7 @@ export const useChatStore = createPersistStore(
           session.messages = [];
           session.memoryPrompt = "";
         });
+        markMeelSyncDirty();
       },
 
       summarizeSession(
@@ -720,6 +731,7 @@ export const useChatStore = createPersistStore(
                     (session.topic =
                       message.length > 0 ? trimTopic(message) : DEFAULT_TOPIC),
                 );
+                markMeelSyncDirty();
               }
             },
           });
@@ -787,6 +799,7 @@ export const useChatStore = createPersistStore(
                   session.lastSummarizeIndex = lastSummarizeIndex;
                   session.memoryPrompt = message; // Update the memory prompt for stored it in local storage
                 });
+                markMeelSyncDirty();
               }
             },
             onError(err) {

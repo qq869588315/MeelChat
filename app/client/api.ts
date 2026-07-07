@@ -11,6 +11,7 @@ import {
   useAccessStore,
   useChatStore,
 } from "../store";
+import { buildOpenAICompatibleProxyTarget } from "../utils/openai-compatible-url";
 import { ChatGPTApi, DalleRequestPayload } from "./platforms/openai";
 import { GeminiProApi } from "./platforms/google";
 import { ClaudeApi } from "./platforms/anthropic";
@@ -197,8 +198,7 @@ export class ClientApi {
       .concat([
         {
           from: "human",
-          value:
-            "Share from [NextChat]: https://github.com/Yidadaa/ChatGPT-Next-Web",
+          value: "Share from [MeelChat]: https://ghcr.io/qq869588315/meelchat",
         },
       ]);
     // 敬告二开开发者们，为了开源大模型的发展，请不要修改上述消息，此消息用于后续数据清洗使用
@@ -360,6 +360,33 @@ export function getHeaders(ignoreHeaders: boolean = false) {
     headers["Authorization"] = getBearerToken(
       ACCESS_CODE_PREFIX + accessStore.accessCode,
     );
+  }
+
+  const isOpenAICompatibleProvider =
+    !isGoogle &&
+    !isAzure &&
+    !isAnthropic &&
+    !isBaidu &&
+    !isByteDance &&
+    !isAlibaba &&
+    !isMoonshot &&
+    !isIflytek &&
+    !isDeepSeek &&
+    !isXAI &&
+    !isChatGLM &&
+    !isSiliconFlow &&
+    !isAI302;
+
+  if (
+    isOpenAICompatibleProvider &&
+    !clientConfig?.isApp &&
+    accessStore.useCustomConfig &&
+    accessStore.openaiUrl.trim().startsWith("http")
+  ) {
+    headers["x-base-url"] = buildOpenAICompatibleProxyTarget(
+      accessStore.openaiUrl,
+      "v1/chat/completions",
+    ).baseUrl;
   }
 
   return headers;

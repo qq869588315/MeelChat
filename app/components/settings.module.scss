@@ -75,6 +75,23 @@
 
 .subtitle-button {
   button {
-    overflow:visible ;
+    overflow: visible;
+  }
+}
+
+.custom-model-actions {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+@media only screen and (max-width: 600px) {
+  .custom-model-actions {
+    justify-content: stretch;
+
+    button {
+      width: 100%;
+    }
   }
 }

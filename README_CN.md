@@ -4,7 +4,7 @@
   <img src="./docs/images/ent.svg" alt="icon"/>
 </a>
 
-<h1 align="center">NextChat</h1>
+<h1 align="center">MeelChat</h1>
 
 一键免费部署你的私人 ChatGPT 网页应用，支持 Claude, GPT4 & Gemini Pro 模型。
 
@@ -13,6 +13,89 @@
 [<img src="https://vercel.com/button" alt="Deploy on Zeabur" height="30">](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChatGPTNextWeb%2FChatGPT-Next-Web&env=OPENAI_API_KEY&env=CODE&project-name=nextchat&repository-name=NextChat) [<img src="https://zeabur.com/button.svg" alt="Deploy on Zeabur" height="30">](https://zeabur.com/templates/ZBUEFA) [<img src="https://gitpod.io/button/open-in-gitpod.svg" alt="Open in Gitpod" height="30">](https://gitpod.io/#https://github.com/Yidadaa/ChatGPT-Next-Web)
 
 </div>
+
+## MeelChat 维护说明
+
+MeelChat 是基于 NextChat 的轻量 fork，新增了面向少量用户的文件同步能力。第一版不引入数据库、不实现账号系统，也不使用 WebDAV 作为主同步方案。
+
+本 fork 面向“用户配置自己的 API 地址和 API Key 后直接聊天、聊天记录自动同步”的轻量场景。为降低学习成本，页面默认隐藏或重定向上游的面具、插件、MCP、SD、Artifacts、NextChat SaaS 引导、更新检查等高阶入口；底层代码暂时保留，便于后续按需恢复。
+
+### Meel 文件同步
+
+服务端接口：
+
+```text
+GET  /api/meel-sync/state
+PUT  /api/meel-sync/state
+Authorization: Bearer <sync-token>
+```
+
+需要配置的环境变量：
+
+```text
+MEEL_SYNC_ENABLED=1
+MEEL_SYNC_DIR=/data/nextchat-sync
+MEEL_SYNC_MAX_BYTES=10485760
+MEEL_SYNC_USERS=user1:<sha256-token-a>,user2:<sha256-token-b>
+```
+
+生成 token hash 的示例：
+
+```shell
+node -e "console.log(require('crypto').createHash('sha256').update('replace-with-user-token').digest('hex'))"
+```
+
+注意事项：
+
+- `MEEL_SYNC_USERS` 只保存 sha256 后的 token hash，真实 token 不写入仓库。
+- 每个用户会写入一个独立文件，例如 `/data/nextchat-sync/user1.json`。
+- 同步 JSON 会严格过滤 API Key、Base URL、访问码、同步 token、`sk-`、`Bearer `、`apiKey`、`password`、`secret` 等敏感内容。
+- 第一版为了满足严格敏感扫描，不同步字段名包含 `token` 的非敏感字段，例如 `max_tokens`、`tokenCount`。
+
+### 本地验证
+
+```shell
+yarn install
+
+# PowerShell 示例
+$env:MEEL_SYNC_ENABLED="1"
+$env:MEEL_SYNC_DIR="E:\workspace\local\MeelChat\.test-tmp\manual-sync"
+$env:MEEL_SYNC_MAX_BYTES="10485760"
+$env:MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>"
+
+yarn dev
+```
+
+在设置页选择 `Meel 文件同步`，填写 `/api/meel-sync/state` 和对应用户的同步 token。建议至少验证：
+
+- 未配置 token 时顶部显示未配置同步，聊天不受影响。
+- 错误 token 会同步失败。
+- 正确 token 首次打开会 pull，AI 回复完成后会 push。
+- user1 和 user2 的 JSON 文件互相隔离。
+- 搜索同步目录时不出现真实 API Key、Base URL、同步 token 或 `sk-`。
+
+### Docker 与阿里云部署约束
+
+镜像通过 GitHub Actions 发布到公开 GHCR：
+
+```text
+ghcr.io/qq869588315/meelchat:latest
+```
+
+阿里云 2C2G 服务器只允许拉取和重启容器：
+
+```shell
+docker compose pull
+docker compose up -d
+```
+
+不要在阿里云服务器上执行 `docker build`、`docker compose build`、`docker compose up --build`。同步目录需要持久化挂载，例如：
+
+```text
+/data/nextchat-sync:/data/nextchat-sync
+```
+
+真实 SSH、token、API Key 等敏感信息放在 AM 的 `am-secrets`，仓库和文档只写占位符或 `secret_ref`。
 
 ## Sponsor AI API
 
@@ -326,33 +409,45 @@ BASE_URL=https://b.nextweb.fun/api/proxy
 > ⚠️ 注意：docker 版本在大多数时间都会落后最新的版本 1 到 2 天，所以部署后会持续出现“存在更新”的提示，属于正常现象。
 
 ```shell
-docker pull yidadaa/chatgpt-next-web
+docker pull ghcr.io/qq869588315/meelchat:latest
 
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=页面访问密码 \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 你也可以指定 proxy：
 
 ```shell
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=页面访问密码 \
    --net=host \
    -e PROXY_URL=http://127.0.0.1:7890 \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 如需启用 MCP 功能，可以使用：
 
 ```shell
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=页面访问密码 \
    -e ENABLE_MCP=true \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 如果你的本地代理需要账号密码，可以使用：

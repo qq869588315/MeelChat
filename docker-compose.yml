@@ -2,8 +2,8 @@ version: "3.9"
 services:
   chatgpt-next-web:
     profiles: [ "no-proxy" ]
-    container_name: chatgpt-next-web
-    image: yidadaa/chatgpt-next-web
+    container_name: meelchat
+    image: ghcr.io/qq869588315/meelchat:latest
     ports:
       - 3000:3000
     environment:
@@ -17,11 +17,17 @@ services:
       - ENABLE_BALANCE_QUERY=$ENABLE_BALANCE_QUERY
       - DISABLE_FAST_LINK=$DISABLE_FAST_LINK
       - OPENAI_SB=$OPENAI_SB
+      - MEEL_SYNC_ENABLED=$MEEL_SYNC_ENABLED
+      - MEEL_SYNC_DIR=${MEEL_SYNC_DIR:-/data/nextchat-sync}
+      - MEEL_SYNC_MAX_BYTES=${MEEL_SYNC_MAX_BYTES:-10485760}
+      - MEEL_SYNC_USERS=$MEEL_SYNC_USERS
+    volumes:
+      - ${MEEL_SYNC_HOST_DIR:-/data/nextchat-sync}:/data/nextchat-sync
 
   chatgpt-next-web-proxy:
     profiles: [ "proxy" ]
-    container_name: chatgpt-next-web-proxy
-    image: yidadaa/chatgpt-next-web
+    container_name: meelchat-proxy
+    image: ghcr.io/qq869588315/meelchat:latest
     ports:
       - 3000:3000
     environment:
@@ -36,3 +42,9 @@ services:
       - ENABLE_BALANCE_QUERY=$ENABLE_BALANCE_QUERY
       - DISABLE_FAST_LINK=$DISABLE_FAST_LINK
       - OPENAI_SB=$OPENAI_SB
+      - MEEL_SYNC_ENABLED=$MEEL_SYNC_ENABLED
+      - MEEL_SYNC_DIR=${MEEL_SYNC_DIR:-/data/nextchat-sync}
+      - MEEL_SYNC_MAX_BYTES=${MEEL_SYNC_MAX_BYTES:-10485760}
+      - MEEL_SYNC_USERS=$MEEL_SYNC_USERS
+    volumes:
+      - ${MEEL_SYNC_HOST_DIR:-/data/nextchat-sync}:/data/nextchat-sync

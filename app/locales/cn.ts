@@ -34,6 +34,16 @@ const cn = {
   },
   Chat: {
     SubTitle: (count: number) => `共 ${count} 条对话`,
+    SyncStatus: {
+      Unconfigured: "未配置同步",
+      Pulling: "正在拉取...",
+      Pushing: "正在上传...",
+      Synced: (time: string) => `已同步 ${time}`,
+      Dirty: "有本地更改，等待上传",
+      Error: "同步失败，点击重试",
+      Offline: "离线，稍后自动重试",
+      Idle: "同步待命",
+    },
     EditMessage: {
       Title: "编辑消息记录",
       Topic: {
@@ -255,11 +265,20 @@ const cn = {
           UserName: "备份名称",
           Password: "UpStash Redis REST Token",
         },
+
+        Meel: {
+          Endpoint: "Meel 同步地址",
+          EndpointSubTitle: "默认使用当前站点的 /api/meel-sync/state",
+          Token: "同步 Token",
+          TokenSubTitle: "每个用户独立配置，请勿与他人共享",
+          AutoSync: "自动同步",
+          AutoSyncSubTitle: "打开页面、AI 回复完成和本地更改后自动同步",
+        },
       },
 
       LocalState: "本地数据",
       Overview: (overview: any) => {
-        return `${overview.chat} 次对话，${overview.message} 条消息，${overview.prompt} 条提示词，${overview.mask} 个面具`;
+        return `${overview.chat} 次对话，${overview.message} 条消息`;
       },
       ImportFailed: "导入失败",
     },
@@ -537,6 +556,15 @@ const cn = {
       CustomModel: {
         Title: "自定义模型名",
         SubTitle: "增加自定义模型可选项，使用英文逗号隔开",
+        Fetch: "获取模型列表",
+        Fetching: "获取中...",
+        FetchSuccess: (count: number) => `已获取 ${count} 个模型`,
+        FetchFailed: (message: string) => `获取模型列表失败：${message}`,
+        FetchEmpty: "接口已接通，但没有返回可用模型",
+        FetchNeedUrl: "请先填写接口地址",
+        FetchNeedApiKey: "请先填写 API Key",
+        FetchOpenAIOnly: "当前只支持 OpenAI 兼容接口获取模型列表",
+        FetchUnknownError: "未知错误",
       },
       AI302: {
         ApiKey: {

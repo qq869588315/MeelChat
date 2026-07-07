@@ -5,6 +5,7 @@ import { ModelConfig, useAppConfig } from "./config";
 import { StoreKey } from "../constant";
 import { nanoid } from "nanoid";
 import { createPersistStore } from "../utils/store";
+import { markMeelSyncDirty } from "../utils/meel-sync/events";
 
 export type Mask = {
   id: string;
@@ -62,6 +63,7 @@ export const useMaskStore = createPersistStore(
 
       set(() => ({ masks }));
       get().markUpdate();
+      markMeelSyncDirty();
 
       return masks[id];
     },
@@ -74,12 +76,14 @@ export const useMaskStore = createPersistStore(
       masks[id] = updateMask;
       set(() => ({ masks }));
       get().markUpdate();
+      markMeelSyncDirty();
     },
     delete(id: string) {
       const masks = get().masks;
       delete masks[id];
       set(() => ({ masks }));
       get().markUpdate();
+      markMeelSyncDirty();
     },
 
     get(id?: string) {

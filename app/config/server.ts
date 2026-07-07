@@ -9,6 +9,10 @@ declare global {
 
       OPENAI_API_KEY?: string;
       CODE?: string;
+      MEEL_SYNC_ENABLED?: string;
+      MEEL_SYNC_DIR?: string;
+      MEEL_SYNC_MAX_BYTES?: string;
+      MEEL_SYNC_USERS?: string;
 
       BASE_URL?: string;
       OPENAI_ORG_ID?: string; // openai only
@@ -120,9 +124,7 @@ function getApiKey(keys?: string) {
   const apiKey = apiKeys[randomIndex];
   if (apiKey) {
     console.log(
-      `[Server Config] using ${randomIndex + 1} of ${
-        apiKeys.length
-      } api key - ${apiKey}`,
+      `[Server Config] using ${randomIndex + 1} of ${apiKeys.length} api key`,
     );
   }
 

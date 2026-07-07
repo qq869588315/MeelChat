@@ -4,7 +4,7 @@
   <img src="https://github.com/user-attachments/assets/83bdcc07-ae5e-4954-a53a-ac151ba6ccf3" width="1000" alt="icon"/>
 </a>
 
-<h1 align="center">NextChat</h1>
+<h1 align="center">MeelChat</h1>
 
 English / [简体中文](./README_CN.md)
 
@@ -34,6 +34,89 @@ English / [简体中文](./README_CN.md)
 [<img src="https://github.com/user-attachments/assets/903482d4-3e87-4134-9af1-f2588fa90659" height="50" width="" >](https://monica.im/?utm=nxcrp)
 
 </div>
+
+## MeelChat Maintenance Notes
+
+MeelChat is a lightweight fork of NextChat with file-based history sync for a small private user group. The first version does not add a database, account system, or WebDAV-based primary sync.
+
+This fork is scoped to a lighter flow: users configure their own API endpoint and API key, chat directly, and let chat records sync automatically. To reduce learning cost, the UI hides or redirects upstream advanced entries such as masks, plugins, MCP, SD, Artifacts, NextChat SaaS prompts, and update checks. The underlying modules are kept for now so they can be restored intentionally later.
+
+### Meel File Sync
+
+Server API:
+
+```text
+GET  /api/meel-sync/state
+PUT  /api/meel-sync/state
+Authorization: Bearer <sync-token>
+```
+
+Required environment variables:
+
+```text
+MEEL_SYNC_ENABLED=1
+MEEL_SYNC_DIR=/data/nextchat-sync
+MEEL_SYNC_MAX_BYTES=10485760
+MEEL_SYNC_USERS=user1:<sha256-token-a>,user2:<sha256-token-b>
+```
+
+Generate a token hash:
+
+```shell
+node -e "console.log(require('crypto').createHash('sha256').update('replace-with-user-token').digest('hex'))"
+```
+
+Notes:
+
+- Store only sha256 token hashes in `MEEL_SYNC_USERS`; never commit real sync tokens.
+- Each user writes to a separate file, for example `/data/nextchat-sync/user1.json`.
+- Sync JSON is strictly filtered for API keys, Base URLs, access codes, sync tokens, `sk-`, `Bearer `, `apiKey`, `password`, and `secret`.
+- To satisfy strict sensitive scanning, v1 does not sync non-sensitive fields whose names include `token`, such as `max_tokens` and `tokenCount`.
+
+### Local Verification
+
+```shell
+yarn install
+
+# PowerShell example
+$env:MEEL_SYNC_ENABLED="1"
+$env:MEEL_SYNC_DIR="E:\workspace\local\MeelChat\.test-tmp\manual-sync"
+$env:MEEL_SYNC_MAX_BYTES="10485760"
+$env:MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>"
+
+yarn dev
+```
+
+In Settings, choose `Meel File Sync`, set `/api/meel-sync/state`, and enter the user's sync token. Verify at least:
+
+- Missing token shows sync not configured and does not block chat.
+- Wrong token shows sync failure.
+- Correct token pulls on first open and pushes after an AI reply.
+- user1 and user2 JSON files are isolated.
+- The sync directory does not contain real API keys, Base URLs, sync tokens, or `sk-`.
+
+### Docker And Aliyun Deployment
+
+GitHub Actions publishes the image to public GHCR:
+
+```text
+ghcr.io/qq869588315/meelchat:latest
+```
+
+The Aliyun 2C2G server should only pull and restart containers:
+
+```shell
+docker compose pull
+docker compose up -d
+```
+
+Do not run `docker build`, `docker compose build`, or `docker compose up --build` on the Aliyun server. Mount the sync directory as persistent storage, for example:
+
+```text
+/data/nextchat-sync:/data/nextchat-sync
+```
+
+Store real SSH credentials, tokens, and API keys in AM `am-secrets`; use placeholders or `secret_ref` values in docs and repository files.
 
 ## ❤️ Sponsor AI API
 
@@ -407,22 +490,30 @@ yarn dev
 ### Docker (Recommended)
 
 ```shell
-docker pull yidadaa/chatgpt-next-web
+docker pull ghcr.io/qq869588315/meelchat:latest
 
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=your-password \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 You can start service behind a proxy:
 
 ```shell
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=your-password \
    -e PROXY_URL=http://localhost:7890 \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 If your proxy needs password, use:
@@ -435,10 +526,14 @@ If enable MCP, use：
 
 ```
 docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY=sk-xxxx \
+   -e OPENAI_API_KEY=<openai-api-key> \
    -e CODE=your-password \
    -e ENABLE_MCP=true \
-   yidadaa/chatgpt-next-web
+   -e MEEL_SYNC_ENABLED=1 \
+   -e MEEL_SYNC_DIR=/data/nextchat-sync \
+   -e MEEL_SYNC_USERS="user1:<sha256-token-a>,user2:<sha256-token-b>" \
+   -v /data/nextchat-sync:/data/nextchat-sync \
+   ghcr.io/qq869588315/meelchat:latest
 ```
 
 ### Shell

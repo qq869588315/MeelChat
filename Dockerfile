@@ -18,6 +18,10 @@ RUN apk update && apk add --no-cache git
 ENV OPENAI_API_KEY=""
 ENV GOOGLE_API_KEY=""
 ENV CODE=""
+ENV MEEL_SYNC_ENABLED=""
+ENV MEEL_SYNC_DIR="/data/nextchat-sync"
+ENV MEEL_SYNC_MAX_BYTES="10485760"
+ENV MEEL_SYNC_USERS=""
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -35,6 +39,10 @@ ENV OPENAI_API_KEY=""
 ENV GOOGLE_API_KEY=""
 ENV CODE=""
 ENV ENABLE_MCP=""
+ENV MEEL_SYNC_ENABLED=""
+ENV MEEL_SYNC_DIR="/data/nextchat-sync"
+ENV MEEL_SYNC_MAX_BYTES="10485760"
+ENV MEEL_SYNC_USERS=""
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

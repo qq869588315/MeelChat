@@ -8,6 +8,7 @@ import { useMaskStore } from "../store/mask";
 import { usePromptStore } from "../store/prompt";
 import { StoreKey } from "../constant";
 import { merge } from "./merge";
+import { sanitizeMeelSyncState } from "./meel-sync/sanitize";
 
 type NonFunctionKeys<T> = {
   [K in keyof T]: T[K] extends (...args: any[]) => any ? never : K;
@@ -46,11 +47,21 @@ const LocalStateGetters = {
   [StoreKey.Prompt]: () => getNonFunctionFileds(usePromptStore.getState()),
 } as const;
 
+export const SyncableStoreKeys = [
+  StoreKey.Chat,
+  StoreKey.Config,
+  StoreKey.Mask,
+  StoreKey.Prompt,
+] as const;
+
 export type AppState = {
   [k in keyof typeof LocalStateGetters]: ReturnType<
     (typeof LocalStateGetters)[k]
   >;
 };
+
+export type SyncableStoreKey = (typeof SyncableStoreKeys)[number];
+export type SyncableAppState = Partial<Pick<AppState, SyncableStoreKey>>;
 
 type Merger<T extends keyof AppState, U = AppState[T]> = (
   localState: U,
@@ -60,6 +71,27 @@ type Merger<T extends keyof AppState, U = AppState[T]> = (
 type StateMerger = {
   [K in keyof AppState]: Merger<K>;
 };
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValidSyncableStoreState(key: SyncableStoreKey, value: unknown) {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  switch (key) {
+    case StoreKey.Chat:
+      return Array.isArray(value.sessions);
+    case StoreKey.Mask:
+      return isPlainObject(value.masks);
+    case StoreKey.Prompt:
+      return isPlainObject(value.prompts);
+    case StoreKey.Config:
+      return true;
+  }
+}
 
 // we merge remote state to local state
 const MergeStates: StateMerger = {
@@ -128,9 +160,27 @@ export function getLocalAppState() {
   return appState;
 }
 
+export function getSyncableAppState() {
+  const appState = Object.fromEntries(
+    SyncableStoreKeys.map((key) => {
+      return [key, LocalStateGetters[key]()];
+    }),
+  ) as SyncableAppState;
+
+  return sanitizeMeelSyncState(appState) as SyncableAppState;
+}
+
 export function setLocalAppState(appState: AppState) {
   Object.entries(LocalStateSetters).forEach(([key, setter]) => {
     setter(appState[key as keyof AppState]);
+  });
+}
+
+export function setSyncableAppState(appState: SyncableAppState) {
+  Object.entries(appState).forEach(([key, value]) => {
+    const setter = LocalStateSetters[key as SyncableStoreKey];
+    if (!setter || value === undefined) return;
+    setter(value as never);
   });
 }
 
@@ -139,7 +189,36 @@ export function mergeAppState(localState: AppState, remoteState: AppState) {
     const key = k as T;
     const localStoreState = localState[key];
     const remoteStoreState = remoteState[key];
-    MergeStates[key](localStoreState, remoteStoreState);
+    if (remoteStoreState === undefined) return;
+    localState[key] = MergeStates[key](
+      localStoreState,
+      remoteStoreState,
+    ) as AppState[T];
+  });
+
+  return localState;
+}
+
+export function mergeSyncableAppState(
+  localState: SyncableAppState,
+  remoteState: SyncableAppState,
+) {
+  SyncableStoreKeys.forEach(<T extends SyncableStoreKey>(key: T) => {
+    const localStoreState = localState[key];
+    const remoteStoreState = remoteState[key];
+
+    if (localStoreState === undefined || remoteStoreState === undefined) {
+      return;
+    }
+
+    if (!isValidSyncableStoreState(key, remoteStoreState)) {
+      return;
+    }
+
+    localState[key] = MergeStates[key](
+      localStoreState as never,
+      remoteStoreState as never,
+    ) as SyncableAppState[T];
   });
 
   return localState;
@@ -153,13 +232,11 @@ export function mergeWithUpdate<T extends { lastUpdateTime?: number }>(
   remoteState: T,
 ) {
   const localUpdateTime = localState.lastUpdateTime ?? 0;
-  const remoteUpdateTime = localState.lastUpdateTime ?? 1;
+  const remoteUpdateTime = remoteState.lastUpdateTime ?? 1;
 
   if (localUpdateTime < remoteUpdateTime) {
-    merge(remoteState, localState);
-    return { ...remoteState };
-  } else {
     merge(localState, remoteState);
-    return { ...localState };
   }
+
+  return { ...localState };
 }

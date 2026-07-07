@@ -306,8 +306,44 @@
   }
 }
 
+.meel-sync-status {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--black);
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 2px 0 0;
+  max-width: 100%;
+  opacity: 0.55;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:not(:disabled) {
+    cursor: pointer;
+    opacity: 0.85;
+  }
+
+  &[data-status="error"],
+  &[data-status="offline"] {
+    color: var(--danger);
+  }
+
+  &[data-status="dirty"] {
+    color: var(--primary);
+  }
+}
+
 @media only screen and (max-width: 600px) {
   .chat-body-title {
+    text-align: center;
+  }
+
+  .meel-sync-status {
     text-align: center;
   }
 }
