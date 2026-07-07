@@ -4,7 +4,7 @@ import { ModalConfigValidator, ModelConfig } from "../store";
 import Locale from "../locales";
 import { InputRange } from "./input-range";
 import { ListItem, Select } from "./ui-lib";
-import { useAllModels } from "../utils/hooks";
+import { useSelectableModels } from "../utils/hooks";
 import { groupBy } from "lodash-es";
 import styles from "./model-config.module.scss";
 import { getModelProvider } from "../utils/model";
@@ -13,11 +13,12 @@ export function ModelConfigList(props: {
   modelConfig: ModelConfig;
   updateConfig: (updater: (config: ModelConfig) => void) => void;
 }) {
-  const allModels = useAllModels();
+  const allModels = useSelectableModels();
   const groupModels = groupBy(
     allModels.filter((v) => v.available),
     "provider.providerName",
   );
+  const hasModels = allModels.length > 0;
   const value = `${props.modelConfig.model}@${props.modelConfig?.providerName}`;
   const compressModelValue = `${props.modelConfig.compressModel}@${props.modelConfig?.compressProviderName}`;
 
@@ -26,8 +27,9 @@ export function ModelConfigList(props: {
       <ListItem title={Locale.Settings.Model}>
         <Select
           aria-label={Locale.Settings.Model}
-          value={value}
+          value={hasModels ? value : ""}
           align="left"
+          disabled={!hasModels}
           onChange={(e) => {
             const [model, providerName] = getModelProvider(
               e.currentTarget.value,
@@ -38,15 +40,24 @@ export function ModelConfigList(props: {
             });
           }}
         >
-          {Object.keys(groupModels).map((providerName, index) => (
-            <optgroup label={providerName} key={index}>
-              {groupModels[providerName].map((v, i) => (
-                <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
-                  {v.displayName}
-                </option>
-              ))}
-            </optgroup>
-          ))}
+          {hasModels ? (
+            Object.keys(groupModels).map((providerName, index) => (
+              <optgroup label={providerName} key={index}>
+                {groupModels[providerName].map((v, i) => (
+                  <option
+                    value={`${v.name}@${v.provider?.providerName}`}
+                    key={i}
+                  >
+                    {v.displayName}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+          ) : (
+            <option value="">
+              {Locale.Settings.Access.CustomModel.EmptySelector}
+            </option>
+          )}
         </Select>
       </ListItem>
       <ListItem

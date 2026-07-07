@@ -539,13 +539,21 @@ const en: LocaleType = {
         },
       },
       CustomModel: {
-        Title: "Custom Models",
-        SubTitle: "Custom model options, seperated by comma",
+        Title: "Available Models",
+        SubTitle:
+          "Fetch models from the current endpoint; chat only shows these models",
         Fetch: "Fetch models",
         Fetching: "Fetching...",
         FetchSuccess: (count: number) => `Fetched ${count} models`,
         FetchFailed: (message: string) => `Failed to fetch models: ${message}`,
         FetchEmpty: "Endpoint connected, but no models were returned",
+        EmptyHint:
+          "Enter the endpoint URL and API Key, then fetch available models",
+        EmptySelector: "Fetch available models in settings first",
+        ConfigureFirst: "Configure models",
+        OnlyFetchedHint: (count: number) =>
+          `Fetched ${count} models. Chat will only show these models.`,
+        ManualHint: (count: number) => `${count} available models configured`,
         FetchNeedUrl: "Please enter the endpoint URL first",
         FetchNeedApiKey: "Please enter the API Key first",
         FetchOpenAIOnly:

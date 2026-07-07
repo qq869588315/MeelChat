@@ -82,6 +82,11 @@ import { useSyncStore } from "../store/sync";
 import { nanoid } from "nanoid";
 import { useMaskStore } from "../store/mask";
 import { ProviderType } from "../utils/cloud";
+import {
+  formatFetchedModelConfig,
+  getAvailableCustomModelItems,
+  hasModelListOnlyRule,
+} from "../utils/model-list-config";
 
 function EditPromptModal(props: { id: string; onClose: () => void }) {
   const promptStore = usePromptStore();
@@ -514,6 +519,14 @@ export function Settings() {
   }
 
   const accessStore = useAccessStore();
+  const customModelItems = useMemo(
+    () => getAvailableCustomModelItems(config.customModels),
+    [config.customModels],
+  );
+  const usesFetchedModelList = useMemo(
+    () => hasModelListOnlyRule(config.customModels),
+    [config.customModels],
+  );
   const shouldHideBalanceQuery = useMemo(() => {
     const isOpenAiUrl = accessStore.openaiUrl.includes(OPENAI_BASE_URL);
 
@@ -1457,7 +1470,7 @@ export function Settings() {
       }
 
       config.update((draft) => {
-        draft.customModels = models.join(",");
+        draft.customModels = formatFetchedModelConfig(models);
       });
       showToast(Locale.Settings.Access.CustomModel.FetchSuccess(models.length));
     } catch (error) {
@@ -1639,6 +1652,32 @@ export function Settings() {
             subTitle={Locale.Settings.Access.CustomModel.SubTitle}
             vertical={true}
           >
+            <div className={styles["custom-model-panel"]}>
+              <div className={styles["custom-model-summary"]}>
+                {customModelItems.length > 0
+                  ? usesFetchedModelList
+                    ? Locale.Settings.Access.CustomModel.OnlyFetchedHint(
+                        customModelItems.length,
+                      )
+                    : Locale.Settings.Access.CustomModel.ManualHint(
+                        customModelItems.length,
+                      )
+                  : Locale.Settings.Access.CustomModel.EmptyHint}
+              </div>
+              {customModelItems.length > 0 ? (
+                <div className={styles["custom-model-tags"]}>
+                  {customModelItems.map((model) => (
+                    <span
+                      className={styles["custom-model-tag"]}
+                      key={`${model.name}@${model.providerName ?? ""}`}
+                      title={model.providerName}
+                    >
+                      {model.displayName}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className={styles["custom-model-actions"]}>
               <IconButton
                 aria={Locale.Settings.Access.CustomModel.Fetch}
@@ -1653,18 +1692,6 @@ export function Settings() {
                 onClick={fetchOpenAIModelList}
               />
             </div>
-            <input
-              aria-label={Locale.Settings.Access.CustomModel.Title}
-              style={{ width: "100%", maxWidth: "unset", textAlign: "left" }}
-              type="text"
-              value={config.customModels}
-              placeholder="model1,model2,model3"
-              onChange={(e) =>
-                config.update(
-                  (config) => (config.customModels = e.currentTarget.value),
-                )
-              }
-            ></input>
           </ListItem>
         </List>
 

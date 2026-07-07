@@ -85,7 +85,7 @@ import { useChatCommand, useCommand } from "../command";
 import { prettyObject } from "../utils/format";
 import { ExportMessageModal } from "./exporter";
 import { getClientConfig } from "../config/client";
-import { useAllModels } from "../utils/hooks";
+import { useSelectableModels } from "../utils/hooks";
 import { ClientApi, MultimodalContent } from "../client/api";
 import { createTTSPlayer } from "../utils/audio";
 import { MsEdgeTTS, OUTPUT_FORMAT } from "../utils/ms_edge_tts";
@@ -277,7 +277,7 @@ export function ChatActions(props: {
   const currentModel = session.mask.modelConfig.model;
   const currentProviderName =
     session.mask.modelConfig?.providerName || ServiceProvider.OpenAI;
-  const allModels = useAllModels();
+  const allModels = useSelectableModels();
   const models = useMemo(() => {
     const filteredModels = allModels.filter((m) => m.available);
     const defaultModel = filteredModels.find((m) => m.isDefault);
@@ -342,21 +342,41 @@ export function ChatActions(props: {
 
         <ChatAction
           onClick={() => setShowModelSelector(true)}
-          text={currentModelName}
+          text={
+            currentModelName ||
+            currentModel ||
+            Locale.Settings.Access.CustomModel.ConfigureFirst
+          }
           icon={<RobotIcon />}
         />
 
         {showModelSelector && (
           <Selector
             defaultSelectedValue={`${currentModel}@${currentProviderName}`}
-            items={models.map((m) => ({
-              title: `${m.displayName}${
-                m?.provider?.providerName
-                  ? " (" + m?.provider?.providerName + ")"
-                  : ""
-              }`,
-              value: `${m.name}@${m?.provider?.providerName}`,
-            }))}
+            items={
+              models.length > 0
+                ? models.map((m) => {
+                    const providerName = m?.provider?.providerName;
+                    const showProvider =
+                      providerName &&
+                      providerName !== ServiceProvider.OpenAI &&
+                      providerName !== m.name;
+
+                    return {
+                      title: `${m.displayName}${
+                        showProvider ? " (" + providerName + ")" : ""
+                      }`,
+                      value: `${m.name}@${providerName}`,
+                    };
+                  })
+                : [
+                    {
+                      title: Locale.Settings.Access.CustomModel.EmptySelector,
+                      value: "__empty__",
+                      disable: true,
+                    },
+                  ]
+            }
             onClose={() => setShowModelSelector(false)}
             onSelection={(s) => {
               if (s.length === 0) return;
