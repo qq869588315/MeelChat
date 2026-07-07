@@ -53,4 +53,101 @@ describe("Meel sync client", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  test("includes status and payload size in upload errors", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 413,
+      json: async () => ({ ok: false, error: "payload_too_large" }),
+    } as Response);
+
+    const client = createMeelSyncClient({
+      meel: {
+        endpoint: "/api/meel-sync/state",
+        token: "token",
+        autoSync: true,
+      },
+    } as any);
+
+    await expect(
+      client.set("state", JSON.stringify({ "chat-next-web-store": {} })),
+    ).rejects.toThrow(/payload_too_large \(HTTP 413, .+ B\)/);
+  });
+
+  test("trims copied token whitespace before sending authorization", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, userId: "me01", updatedAt: null }),
+    } as Response);
+
+    const client = createMeelSyncClient({
+      meel: {
+        endpoint: "/api/meel-sync/state",
+        token: "  token\n",
+        autoSync: true,
+      },
+    } as any);
+
+    await expect(
+      client.set("state", JSON.stringify({ "chat-next-web-store": {} })),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/meel-sync/state",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer token" }),
+      }),
+    );
+  });
+
+  test("rejects unsafe token formatting before sending the request", async () => {
+    const fetchMock = jest.spyOn(global, "fetch");
+    fetchMock.mockClear();
+
+    const client = createMeelSyncClient({
+      meel: {
+        endpoint: "/api/meel-sync/state",
+        token: "tok\nen",
+        autoSync: true,
+      },
+    } as any);
+
+    await expect(
+      client.set("state", JSON.stringify({ "chat-next-web-store": {} })),
+    ).rejects.toThrow("invalid_sync_token");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("wraps failed uploads as network errors with payload size", async () => {
+    jest.spyOn(global, "fetch").mockRejectedValueOnce(new TypeError("failed"));
+
+    const client = createMeelSyncClient({
+      meel: {
+        endpoint: "/api/meel-sync/state",
+        token: "token",
+        autoSync: true,
+      },
+    } as any);
+
+    await expect(
+      client.set("state", JSON.stringify({ "chat-next-web-store": {} })),
+    ).rejects.toThrow(/network_error \(.+ B\)/);
+  });
+
+  test("rejects oversized uploads before sending the request", async () => {
+    const fetchMock = jest.spyOn(global, "fetch");
+    fetchMock.mockClear();
+    const client = createMeelSyncClient({
+      meel: {
+        endpoint: "/api/meel-sync/state",
+        token: "token",
+        autoSync: true,
+      },
+    } as any);
+
+    await expect(
+      client.set("state", JSON.stringify({ oversized: "x".repeat(10485760) })),
+    ).rejects.toThrow(/payload_too_large \(.+ MB\)/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

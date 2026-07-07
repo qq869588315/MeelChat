@@ -16,6 +16,67 @@ type MeelSyncResponse =
     };
 
 const DEFAULT_MEEL_SYNC_ENDPOINT = "/api/meel-sync/state";
+const DEFAULT_MEEL_SYNC_MAX_BYTES = 10 * 1024 * 1024;
+
+function formatBytes(bytes?: number) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getUtf8ByteLength(value: string) {
+  let bytes = 0;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+
+    if (code <= 0x7f) {
+      bytes += 1;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      i += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+
+  return bytes;
+}
+
+function formatSyncError(error: string, status?: number, bytes?: number) {
+  const details = [status ? `HTTP ${status}` : "", formatBytes(bytes)].filter(
+    Boolean,
+  );
+
+  return details.length > 0 ? `${error} (${details.join(", ")})` : error;
+}
+
+function normalizeMeelSyncToken(token: string) {
+  return token.trim();
+}
+
+function assertSafeMeelSyncToken(token: string) {
+  if (!token || /[\r\n\0]/.test(token)) {
+    throw new Error("invalid_sync_token");
+  }
+
+  return token;
+}
+
+async function fetchMeelSync(
+  path: string,
+  init: RequestInit,
+  requestBytes?: number,
+) {
+  try {
+    return await fetch(path, init);
+  } catch {
+    throw new Error(formatSyncError("network_error", undefined, requestBytes));
+  }
+}
 
 export function normalizeMeelSyncEndpoint(endpoint: string) {
   const trimmed = endpoint.trim();
@@ -59,22 +120,28 @@ export function normalizeMeelSyncEndpoint(endpoint: string) {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
-async function readMeelSyncResponse(res: Response) {
+async function readMeelSyncResponse(res: Response, requestBytes?: number) {
   let data: MeelSyncResponse;
 
   try {
     data = (await res.json()) as MeelSyncResponse;
   } catch {
-    throw new Error("invalid_sync_endpoint");
+    throw new Error(
+      formatSyncError("invalid_sync_endpoint", res.status, requestBytes),
+    );
   }
 
   if (!data || typeof data !== "object" || !("ok" in data)) {
-    throw new Error("invalid_sync_endpoint");
+    throw new Error(
+      formatSyncError("invalid_sync_endpoint", res.status, requestBytes),
+    );
   }
 
   if (!res.ok || data.ok !== true) {
     const error = data.ok ? "sync_failed" : data.error;
-    throw new Error(error || "sync_failed");
+    throw new Error(
+      formatSyncError(error || "sync_failed", res.status, requestBytes),
+    );
   }
 
   return data;
@@ -85,12 +152,12 @@ export function createMeelSyncClient(store: SyncStore) {
 
   return {
     async check() {
-      if (!config.token.trim()) {
+      if (!normalizeMeelSyncToken(config.token)) {
         return false;
       }
 
       try {
-        const res = await fetch(this.path(), {
+        const res = await fetchMeelSync(this.path(), {
           method: "GET",
           headers: this.headers(),
         });
@@ -102,7 +169,7 @@ export function createMeelSyncClient(store: SyncStore) {
     },
 
     async get() {
-      const res = await fetch(this.path(), {
+      const res = await fetchMeelSync(this.path(), {
         method: "GET",
         headers: this.headers(),
       });
@@ -117,26 +184,47 @@ export function createMeelSyncClient(store: SyncStore) {
 
     async set(_: string, value: string) {
       const state = JSON.parse(value);
-      const res = await fetch(this.path(), {
-        method: "PUT",
-        headers: {
-          ...this.headers(),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ state }),
-      });
+      const body = JSON.stringify({ state });
+      const requestBytes = getUtf8ByteLength(body);
 
-      await readMeelSyncResponse(res);
+      if (requestBytes > DEFAULT_MEEL_SYNC_MAX_BYTES) {
+        throw new Error(
+          formatSyncError("payload_too_large", undefined, requestBytes),
+        );
+      }
+
+      const res = await fetchMeelSync(
+        this.path(),
+        {
+          method: "PUT",
+          headers: {
+            ...this.headers(),
+            "Content-Type": "application/json",
+          },
+          body,
+        },
+        requestBytes,
+      );
+
+      await readMeelSyncResponse(res, requestBytes);
     },
 
     headers() {
+      const token = assertSafeMeelSyncToken(
+        normalizeMeelSyncToken(config.token),
+      );
+
       return {
-        Authorization: `Bearer ${config.token}`,
+        Authorization: `Bearer ${token}`,
       };
     },
 
     path() {
-      return normalizeMeelSyncEndpoint(config.endpoint);
+      try {
+        return normalizeMeelSyncEndpoint(config.endpoint);
+      } catch {
+        throw new Error("invalid_sync_endpoint");
+      }
     },
   };
 }

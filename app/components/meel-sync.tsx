@@ -185,6 +185,12 @@ function formatSyncTime(time: number) {
   });
 }
 
+function formatSyncError(error: string) {
+  return error
+    ? `${Locale.Chat.SyncStatus.Error}: ${error}`
+    : Locale.Chat.SyncStatus.Error;
+}
+
 export function MeelSyncStatusBar() {
   const syncStore = useSyncStore();
 
@@ -205,7 +211,7 @@ export function MeelSyncStatusBar() {
       case "dirty":
         return Locale.Chat.SyncStatus.Dirty;
       case "error":
-        return Locale.Chat.SyncStatus.Error;
+        return formatSyncError(syncStore.syncError);
       case "offline":
         return Locale.Chat.SyncStatus.Offline;
       case "synced":
@@ -231,6 +237,7 @@ export function MeelSyncStatusBar() {
       className={styles["meel-sync-status"]}
       data-status={syncStore.syncStatus}
       disabled={!canRetry}
+      title={syncStore.syncError || label}
       onClick={() => {
         if (!canRetry) return;
         syncStore.retryMeelSync().catch(() => undefined);

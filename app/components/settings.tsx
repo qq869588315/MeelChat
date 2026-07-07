@@ -452,8 +452,9 @@ function SyncItems() {
                   try {
                     await syncStore.sync();
                     showToast(Locale.Settings.Sync.Success);
-                  } catch (e) {
-                    showToast(Locale.Settings.Sync.Fail);
+                  } catch (e: any) {
+                    const error = e?.message ? `: ${e.message}` : "";
+                    showToast(`${Locale.Settings.Sync.Fail}${error}`);
                     console.error("[Sync]", e);
                   }
                 }}
