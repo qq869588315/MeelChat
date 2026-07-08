@@ -316,4 +316,114 @@ describe("Meel sync merge behavior", () => {
     expect(merged["mask-store"]?.masks).toHaveProperty("localMask");
     expect(merged["prompt-store"]?.prompts).toHaveProperty("localPrompt");
   });
+
+  test("remote sessions replace the default empty local placeholder", () => {
+    const localState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "local-empty",
+            topic: "新的聊天",
+            messages: [],
+            lastUpdate: 3000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+    const remoteState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "remote-chat",
+            topic: "remote",
+            messages: [{ id: "remote-message", date: "2026-07-08" }],
+            lastUpdate: 1000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+
+    const merged = mergeSyncableAppState(localState, remoteState);
+
+    expect(merged["chat-next-web-store"]?.sessions).toHaveLength(1);
+    expect(merged["chat-next-web-store"]?.sessions?.[0]?.id).toBe(
+      "remote-chat",
+    );
+    expect(merged["chat-next-web-store"]?.currentSessionIndex).toBe(0);
+  });
+
+  test("empty remote sessions are synced instead of skipped", () => {
+    const localState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "local-chat",
+            messages: [{ id: "local-message", date: "2026-07-08" }],
+            lastUpdate: 1000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+    const remoteState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "remote-empty",
+            messages: [],
+            lastUpdate: 2000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+
+    const merged = mergeSyncableAppState(localState, remoteState);
+
+    expect(
+      merged["chat-next-web-store"]?.sessions?.some(
+        (session) => session.id === "remote-empty",
+      ),
+    ).toBe(true);
+  });
+
+  test("newer remote sessions update renamed and edited local sessions", () => {
+    const localState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "same-chat",
+            topic: "old topic",
+            messages: [{ id: "message", content: "old", date: "2026-07-08" }],
+            lastUpdate: 1000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+    const remoteState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "same-chat",
+            topic: "new topic",
+            messages: [{ id: "message", content: "new", date: "2026-07-08" }],
+            lastUpdate: 2000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+
+    const merged = mergeSyncableAppState(localState, remoteState);
+
+    expect(merged["chat-next-web-store"]?.sessions?.[0]?.topic).toBe(
+      "new topic",
+    );
+    expect(
+      merged["chat-next-web-store"]?.sessions?.[0]?.messages?.[0]?.content,
+    ).toBe("new");
+  });
 });

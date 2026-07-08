@@ -93,45 +93,84 @@ function isValidSyncableStoreState(key: SyncableStoreKey, value: unknown) {
   }
 }
 
+function getSessionUpdateTime(session: Partial<ChatSession>) {
+  return typeof session.lastUpdate === "number" ? session.lastUpdate : 0;
+}
+
+function isEmptyChatSession(session: Partial<ChatSession> | undefined) {
+  return !session || !Array.isArray(session.messages)
+    ? true
+    : session.messages.length === 0;
+}
+
+function sortChatSessions(sessions: ChatSession[]) {
+  sessions.sort((a, b) => getSessionUpdateTime(b) - getSessionUpdateTime(a));
+}
+
+function mergeChatState(
+  localState: AppState[StoreKey.Chat],
+  remoteState: AppState[StoreKey.Chat],
+) {
+  const remoteSessions = Array.isArray(remoteState.sessions)
+    ? remoteState.sessions
+    : [];
+
+  if (remoteSessions.length === 0) {
+    return localState;
+  }
+
+  const currentSession = localState.sessions[localState.currentSessionIndex];
+  const currentSessionId = currentSession?.id;
+  const localOnlyHasPlaceholder =
+    localState.sessions.length === 1 && isEmptyChatSession(currentSession);
+
+  if (localOnlyHasPlaceholder) {
+    localState.sessions = remoteSessions.map((session) => ({ ...session }));
+    sortChatSessions(localState.sessions);
+    localState.currentSessionIndex = 0;
+    return localState;
+  }
+
+  const localSessions = new Map<string, ChatSession>();
+  localState.sessions.forEach((session) =>
+    localSessions.set(session.id, session),
+  );
+
+  remoteSessions.forEach((remoteSession) => {
+    const localSession = localSessions.get(remoteSession.id);
+
+    if (!localSession) {
+      localState.sessions.push(remoteSession);
+      localSessions.set(remoteSession.id, remoteSession);
+      return;
+    }
+
+    if (
+      getSessionUpdateTime(remoteSession) > getSessionUpdateTime(localSession)
+    ) {
+      Object.assign(localSession, remoteSession);
+    }
+  });
+
+  sortChatSessions(localState.sessions);
+
+  const nextCurrentSessionIndex = localState.sessions.findIndex(
+    (session) => session.id === currentSessionId,
+  );
+  localState.currentSessionIndex =
+    nextCurrentSessionIndex >= 0
+      ? nextCurrentSessionIndex
+      : Math.min(
+          localState.sessions.length - 1,
+          localState.currentSessionIndex,
+        );
+
+  return localState;
+}
+
 // we merge remote state to local state
 const MergeStates: StateMerger = {
-  [StoreKey.Chat]: (localState, remoteState) => {
-    // merge sessions
-    const localSessions: Record<string, ChatSession> = {};
-    localState.sessions.forEach((s) => (localSessions[s.id] = s));
-
-    remoteState.sessions.forEach((remoteSession) => {
-      // skip empty chats
-      if (remoteSession.messages.length === 0) return;
-
-      const localSession = localSessions[remoteSession.id];
-      if (!localSession) {
-        // if remote session is new, just merge it
-        localState.sessions.push(remoteSession);
-      } else {
-        // if both have the same session id, merge the messages
-        const localMessageIds = new Set(localSession.messages.map((v) => v.id));
-        remoteSession.messages.forEach((m) => {
-          if (!localMessageIds.has(m.id)) {
-            localSession.messages.push(m);
-          }
-        });
-
-        // sort local messages with date field in asc order
-        localSession.messages.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        );
-      }
-    });
-
-    // sort local sessions with date field in desc order
-    localState.sessions.sort(
-      (a, b) =>
-        new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime(),
-    );
-
-    return localState;
-  },
+  [StoreKey.Chat]: mergeChatState,
   [StoreKey.Prompt]: (localState, remoteState) => {
     localState.prompts = {
       ...remoteState.prompts,
