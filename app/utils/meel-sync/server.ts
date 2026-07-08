@@ -8,6 +8,7 @@ import {
   decodeMeelSyncStoredState,
   encodeMeelSyncStoredState,
   hasMeelSyncSensitiveText,
+  normalizeMeelSyncStateForClient,
   sanitizeMeelSyncState,
   stripMeelSyncSensitiveFields,
 } from "./sanitize";
@@ -19,6 +20,7 @@ export {
   decodeMeelSyncStoredState,
   encodeMeelSyncStoredState,
   hasMeelSyncSensitiveText,
+  normalizeMeelSyncStateForClient,
   sanitizeMeelSyncState,
   stripMeelSyncSensitiveFields,
 };
@@ -150,7 +152,7 @@ export async function readMeelSyncFile(filePath: string) {
   const parsed = JSON.parse(rawContent) as StoredMeelSyncFile | MeelSyncState;
 
   if (isPlainObject(parsed) && "state" in parsed) {
-    const state = sanitizeMeelSyncState(
+    const state = normalizeMeelSyncStateForClient(
       decodeMeelSyncStoredState(parsed.state),
     );
     const updatedAt =
@@ -160,7 +162,7 @@ export async function readMeelSyncFile(filePath: string) {
 
   return {
     updatedAt: null,
-    state: sanitizeMeelSyncState(decodeMeelSyncStoredState(parsed)),
+    state: normalizeMeelSyncStateForClient(decodeMeelSyncStoredState(parsed)),
   };
 }
 

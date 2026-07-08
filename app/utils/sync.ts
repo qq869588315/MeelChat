@@ -1,5 +1,7 @@
 import {
   ChatSession,
+  normalizeChatSession,
+  normalizeChatStoreState,
   useAccessStore,
   useAppConfig,
   useChatStore,
@@ -93,6 +95,19 @@ function isValidSyncableStoreState(key: SyncableStoreKey, value: unknown) {
   }
 }
 
+function normalizeSyncableStoreState<T extends SyncableStoreKey>(
+  key: T,
+  value: SyncableAppState[T],
+) {
+  if (key === StoreKey.Chat) {
+    return normalizeChatStoreState(
+      value as Partial<AppState[StoreKey.Chat]>,
+    ) as SyncableAppState[T];
+  }
+
+  return value;
+}
+
 function getSessionUpdateTime(session: Partial<ChatSession>) {
   return typeof session.lastUpdate === "number" ? session.lastUpdate : 0;
 }
@@ -111,8 +126,20 @@ function mergeChatState(
   localState: AppState[StoreKey.Chat],
   remoteState: AppState[StoreKey.Chat],
 ) {
+  localState.sessions = Array.isArray(localState.sessions)
+    ? localState.sessions.map((session) => normalizeChatSession(session))
+    : [];
+  localState.currentSessionIndex =
+    localState.sessions.length > 0 &&
+    typeof localState.currentSessionIndex === "number"
+      ? Math.min(
+          localState.sessions.length - 1,
+          Math.max(0, localState.currentSessionIndex),
+        )
+      : 0;
+
   const remoteSessions = Array.isArray(remoteState.sessions)
-    ? remoteState.sessions
+    ? remoteState.sessions.map((session) => normalizeChatSession(session))
     : [];
 
   if (remoteSessions.length === 0) {
@@ -217,9 +244,10 @@ export function setLocalAppState(appState: AppState) {
 
 export function setSyncableAppState(appState: SyncableAppState) {
   Object.entries(appState).forEach(([key, value]) => {
-    const setter = LocalStateSetters[key as SyncableStoreKey];
+    const storeKey = key as SyncableStoreKey;
+    const setter = LocalStateSetters[storeKey];
     if (!setter || value === undefined) return;
-    setter(value as never);
+    setter(normalizeSyncableStoreState(storeKey, value as never) as never);
   });
 }
 

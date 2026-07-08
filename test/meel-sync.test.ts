@@ -171,6 +171,34 @@ describe("Meel sync server helpers", () => {
       masks: {},
     });
   });
+
+  test("normalizes filtered chat fields for client reads without changing stored zero-match files", async () => {
+    const filePath = resolveMeelSyncStatePath(TEST_TMP_DIR, "user1");
+
+    await writeMeelSyncFile(filePath, {
+      updatedAt: 3,
+      state: {
+        "chat-next-web-store": {
+          currentSessionIndex: 0,
+          sessions: [
+            {
+              id: "filtered-session",
+              stat: { wordCount: 1, charCount: 2 },
+              messages: [{ id: "filtered-message", role: "user" }],
+            },
+          ],
+        },
+      },
+    });
+
+    const saved = await fs.readFile(filePath, "utf8");
+    const current = await readMeelSyncFile(filePath);
+    const session = (current.state["chat-next-web-store"] as any).sessions[0];
+
+    expect(saved).not.toMatch(/apiKey|password|secret|token|accessCode|baseUrl|endpoint/i);
+    expect(session.stat.tokenCount).toBe(0);
+    expect(session.messages[0].content).toBe("");
+  });
 });
 
 describe("Meel sync route", () => {
@@ -425,5 +453,49 @@ describe("Meel sync merge behavior", () => {
     expect(
       merged["chat-next-web-store"]?.sessions?.[0]?.messages?.[0]?.content,
     ).toBe("new");
+  });
+
+  test("remote sessions with filtered fields are normalized before merging", () => {
+    const localState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "local-empty",
+            messages: [],
+            lastUpdate: 1000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+    const remoteState = {
+      "chat-next-web-store": {
+        currentSessionIndex: 0,
+        sessions: [
+          {
+            id: "remote-filtered",
+            topic: "remote",
+            stat: {
+              wordCount: 1,
+              charCount: 2,
+            },
+            messages: [
+              {
+                id: "filtered-message",
+                role: "user",
+                date: "2026-07-08",
+              },
+            ],
+            lastUpdate: 2000,
+          },
+        ],
+      },
+    } as unknown as SyncableAppState;
+
+    const merged = mergeSyncableAppState(localState, remoteState);
+    const session = merged["chat-next-web-store"]?.sessions?.[0];
+
+    expect(session?.stat?.tokenCount).toBe(0);
+    expect(session?.messages?.[0]?.content).toBe("");
   });
 });

@@ -120,6 +120,100 @@ function createEmptySession(): ChatSession {
   };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function normalizeChatMessage(
+  message: Partial<ChatMessage> | undefined,
+): ChatMessage {
+  const fallback = createMessage({});
+  const source = isPlainObject(message) ? message : {};
+  const content =
+    typeof source.content === "string" || Array.isArray(source.content)
+      ? source.content
+      : "";
+
+  return {
+    ...fallback,
+    ...source,
+    id:
+      typeof source.id === "string" && source.id.length > 0
+        ? source.id
+        : fallback.id,
+    date:
+      typeof source.date === "string" && source.date.length > 0
+        ? source.date
+        : fallback.date,
+    role: source.role ?? fallback.role,
+    content,
+  } as ChatMessage;
+}
+
+export function normalizeChatSession(
+  session: Partial<ChatSession> | undefined,
+): ChatSession {
+  const fallback = createEmptySession();
+  const source = isPlainObject(session) ? session : {};
+  const sourceStat = isPlainObject(source.stat) ? source.stat : {};
+  const sourceMask = (
+    isPlainObject(source.mask) ? source.mask : {}
+  ) as Record<string, unknown>;
+  const fallbackMask = createEmptyMask();
+  const sourceModelConfig = isPlainObject(sourceMask.modelConfig)
+    ? sourceMask.modelConfig
+    : {};
+
+  const stat = {
+    ...fallback.stat,
+    ...sourceStat,
+  };
+
+  stat.tokenCount =
+    typeof stat.tokenCount === "number" ? stat.tokenCount : 0;
+  stat.wordCount = typeof stat.wordCount === "number" ? stat.wordCount : 0;
+  stat.charCount = typeof stat.charCount === "number" ? stat.charCount : 0;
+
+  return {
+    ...fallback,
+    ...source,
+    id:
+      typeof source.id === "string" && source.id.length > 0
+        ? source.id
+        : fallback.id,
+    topic:
+      typeof source.topic === "string" && source.topic.length > 0
+        ? source.topic
+        : fallback.topic,
+    messages: Array.isArray(source.messages)
+      ? source.messages.map((message) => normalizeChatMessage(message))
+      : [],
+    stat,
+    lastUpdate:
+      typeof source.lastUpdate === "number"
+        ? source.lastUpdate
+        : fallback.lastUpdate,
+    lastSummarizeIndex:
+      typeof source.lastSummarizeIndex === "number"
+        ? source.lastSummarizeIndex
+        : fallback.lastSummarizeIndex,
+    mask: {
+      ...fallbackMask,
+      ...sourceMask,
+      context: Array.isArray(sourceMask.context)
+        ? sourceMask.context.map((message) => normalizeChatMessage(message))
+        : fallbackMask.context,
+      modelConfig: {
+        ...fallbackMask.modelConfig,
+        ...sourceModelConfig,
+      },
+      plugin: Array.isArray(sourceMask.plugin)
+        ? sourceMask.plugin
+        : fallbackMask.plugin,
+    },
+  } as ChatSession;
+}
+
 function getSummarizeModel(
   currentModel: string,
   providerName: string,
@@ -229,6 +323,27 @@ const DEFAULT_CHAT_STATE = {
   currentSessionIndex: 0,
   lastInput: "",
 };
+
+export function normalizeChatStoreState<
+  T extends Partial<typeof DEFAULT_CHAT_STATE>,
+>(state: T | null | undefined) {
+  const source = (isPlainObject(state) ? state : {}) as T;
+  const sessions =
+    Array.isArray(source.sessions) && source.sessions.length > 0
+      ? source.sessions.map((session) => normalizeChatSession(session))
+      : [createEmptySession()];
+  const currentSessionIndex =
+    typeof source.currentSessionIndex === "number"
+      ? Math.min(sessions.length - 1, Math.max(0, source.currentSessionIndex))
+      : 0;
+
+  return {
+    ...source,
+    sessions,
+    currentSessionIndex,
+    lastInput: typeof source.lastInput === "string" ? source.lastInput : "",
+  };
+}
 
 export const useChatStore = createPersistStore(
   DEFAULT_CHAT_STATE,
@@ -873,7 +988,7 @@ export const useChatStore = createPersistStore(
   },
   {
     name: StoreKey.Chat,
-    version: 3.3,
+    version: 3.4,
     migrate(persistedState, version) {
       const state = persistedState as any;
       const newState = JSON.parse(
@@ -938,7 +1053,7 @@ export const useChatStore = createPersistStore(
         });
       }
 
-      return newState as any;
+      return normalizeChatStoreState(newState) as any;
     },
   },
 );

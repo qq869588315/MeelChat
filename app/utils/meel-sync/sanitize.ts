@@ -94,6 +94,139 @@ export function sanitizeMeelSyncState(state: unknown): MeelSyncState {
   return cleanState;
 }
 
+function normalizeSyncMessage(message: unknown, index: number) {
+  const fallback = {
+    id: `synced-message-${index}`,
+    date: "",
+    role: "user",
+    content: "",
+  };
+
+  if (!isPlainObject(message)) {
+    return fallback;
+  }
+
+  const content =
+    typeof message.content === "string" || Array.isArray(message.content)
+      ? message.content
+      : "";
+
+  return {
+    ...fallback,
+    ...message,
+    id:
+      typeof message.id === "string" && message.id.length > 0
+        ? message.id
+        : fallback.id,
+    date:
+      typeof message.date === "string" && message.date.length > 0
+        ? message.date
+        : fallback.date,
+    role: typeof message.role === "string" ? message.role : fallback.role,
+    content,
+  };
+}
+
+function normalizeSyncSession(session: unknown, index: number) {
+  const fallback = {
+    id: `synced-session-${index}`,
+    topic: "",
+    messages: [],
+    stat: {
+      tokenCount: 0,
+      wordCount: 0,
+      charCount: 0,
+    },
+    lastUpdate: 0,
+    lastSummarizeIndex: 0,
+  };
+
+  if (!isPlainObject(session)) {
+    return fallback;
+  }
+
+  const sourceStat = isPlainObject(session.stat) ? session.stat : {};
+  const stat = {
+    ...fallback.stat,
+    ...sourceStat,
+    tokenCount:
+      typeof sourceStat.tokenCount === "number" ? sourceStat.tokenCount : 0,
+    wordCount:
+      typeof sourceStat.wordCount === "number" ? sourceStat.wordCount : 0,
+    charCount:
+      typeof sourceStat.charCount === "number" ? sourceStat.charCount : 0,
+  };
+  const sourceMask = isPlainObject(session.mask) ? session.mask : undefined;
+  const mask = sourceMask
+    ? {
+        ...sourceMask,
+        context: Array.isArray(sourceMask.context)
+          ? sourceMask.context.map((message, messageIndex) =>
+              normalizeSyncMessage(message, messageIndex),
+            )
+          : [],
+      }
+    : sourceMask;
+
+  return {
+    ...fallback,
+    ...session,
+    id:
+      typeof session.id === "string" && session.id.length > 0
+        ? session.id
+        : fallback.id,
+    topic: typeof session.topic === "string" ? session.topic : fallback.topic,
+    messages: Array.isArray(session.messages)
+      ? session.messages.map((message, messageIndex) =>
+          normalizeSyncMessage(message, messageIndex),
+        )
+      : [],
+    stat,
+    lastUpdate:
+      typeof session.lastUpdate === "number"
+        ? session.lastUpdate
+        : fallback.lastUpdate,
+    lastSummarizeIndex:
+      typeof session.lastSummarizeIndex === "number"
+        ? session.lastSummarizeIndex
+        : fallback.lastSummarizeIndex,
+    ...(mask ? { mask } : {}),
+  };
+}
+
+function normalizeSyncChatState(chatState: unknown) {
+  if (!isPlainObject(chatState)) {
+    return chatState;
+  }
+
+  const sessions = Array.isArray(chatState.sessions)
+    ? chatState.sessions.map((session, index) =>
+        normalizeSyncSession(session, index),
+      )
+    : [];
+  const currentSessionIndex =
+    sessions.length > 0 && typeof chatState.currentSessionIndex === "number"
+      ? Math.min(sessions.length - 1, Math.max(0, chatState.currentSessionIndex))
+      : 0;
+
+  return {
+    ...chatState,
+    sessions,
+    currentSessionIndex,
+  };
+}
+
+export function normalizeMeelSyncStateForClient(state: unknown): MeelSyncState {
+  const cleanState = sanitizeMeelSyncState(state);
+  const chatState = cleanState["chat-next-web-store"];
+
+  if (chatState !== undefined) {
+    cleanState["chat-next-web-store"] = normalizeSyncChatState(chatState);
+  }
+
+  return cleanState;
+}
+
 export function encodeMeelSyncStoredState(state: MeelSyncState) {
   const storedState: Record<string, unknown> = {};
 
