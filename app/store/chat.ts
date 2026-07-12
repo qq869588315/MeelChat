@@ -96,6 +96,12 @@ export interface ChatSession {
   mask: Mask;
 }
 
+export type ChatFileAttachment = {
+  name: string;
+  content: string;
+  size: number;
+};
+
 export const DEFAULT_TOPIC = Locale.Store.DefaultTopic;
 export const BOT_HELLO: ChatMessage = createMessage({
   role: "assistant",
@@ -156,9 +162,10 @@ export function normalizeChatSession(
   const fallback = createEmptySession();
   const source = isPlainObject(session) ? session : {};
   const sourceStat = isPlainObject(source.stat) ? source.stat : {};
-  const sourceMask = (
-    isPlainObject(source.mask) ? source.mask : {}
-  ) as Record<string, unknown>;
+  const sourceMask = (isPlainObject(source.mask) ? source.mask : {}) as Record<
+    string,
+    unknown
+  >;
   const fallbackMask = createEmptyMask();
   const sourceModelConfig = isPlainObject(sourceMask.modelConfig)
     ? sourceMask.modelConfig
@@ -169,8 +176,7 @@ export function normalizeChatSession(
     ...sourceStat,
   };
 
-  stat.tokenCount =
-    typeof stat.tokenCount === "number" ? stat.tokenCount : 0;
+  stat.tokenCount = typeof stat.tokenCount === "number" ? stat.tokenCount : 0;
   stat.wordCount = typeof stat.wordCount === "number" ? stat.wordCount : 0;
   stat.charCount = typeof stat.charCount === "number" ? stat.charCount : 0;
 
@@ -530,18 +536,48 @@ export const useChatStore = createPersistStore(
         content: string,
         attachImages?: string[],
         isMcpResponse?: boolean,
+        attachFiles?: ChatFileAttachment[],
       ) {
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
+        const fileBlocks =
+          !isMcpResponse && attachFiles && attachFiles.length > 0
+            ? attachFiles
+                .map((file) =>
+                  [`<file name="${file.name}">`, file.content, "</file>"].join(
+                    "\n",
+                  ),
+                )
+                .join("\n\n")
+            : "";
+        const fileSummaries =
+          !isMcpResponse && attachFiles && attachFiles.length > 0
+            ? attachFiles.map((file) => `[文件未同步: ${file.name}]`).join("\n")
+            : "";
+        const requestText = [content, fileBlocks].filter(Boolean).join("\n\n");
+        const savedText = [content, fileSummaries].filter(Boolean).join("\n\n");
 
         // MCP Response no need to fill template
-        let mContent: string | MultimodalContent[] = isMcpResponse
+        let requestContent: string | MultimodalContent[] = isMcpResponse
           ? content
-          : fillTemplateWith(content, modelConfig);
+          : fillTemplateWith(requestText, modelConfig);
+        let savedContent: string | MultimodalContent[] = isMcpResponse
+          ? content
+          : fillTemplateWith(savedText, modelConfig);
 
         if (!isMcpResponse && attachImages && attachImages.length > 0) {
-          mContent = [
-            ...(content ? [{ type: "text" as const, text: content }] : []),
+          const requestImageText = fillTemplateWith(requestText, modelConfig);
+          requestContent = [
+            ...(requestImageText
+              ? [{ type: "text" as const, text: requestImageText }]
+              : []),
+            ...attachImages.map((url) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            })),
+          ];
+          savedContent = [
+            ...(savedText ? [{ type: "text" as const, text: savedText }] : []),
             ...attachImages.map((url) => ({
               type: "image_url" as const,
               image_url: { url },
@@ -551,7 +587,7 @@ export const useChatStore = createPersistStore(
 
         let userMessage: ChatMessage = createMessage({
           role: "user",
-          content: mContent,
+          content: savedContent,
           isMcpResponse,
         });
 
@@ -563,14 +599,17 @@ export const useChatStore = createPersistStore(
 
         // get recent messages
         const recentMessages = await get().getMessagesWithMemory();
-        const sendMessages = recentMessages.concat(userMessage);
+        const sendMessages = recentMessages.concat({
+          ...userMessage,
+          content: requestContent,
+        });
         const messageIndex = session.messages.length + 1;
 
         // save user's and bot's message
         get().updateTargetSession(session, (session) => {
           const savedUserMessage = {
             ...userMessage,
-            content: mContent,
+            content: savedContent,
           };
           session.messages = session.messages.concat([
             savedUserMessage,

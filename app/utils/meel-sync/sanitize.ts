@@ -30,6 +30,7 @@ const SENSITIVE_KEY_RE =
 const SENSITIVE_VALUE_RE =
   /bearer\s+|api[-_]?key|password|secret|token|access[-_]?code|base[-_]?url|endpoint/i;
 const UNSAFE_OBJECT_KEY_RE = /^(__proto__|constructor|prototype)$/i;
+const UNSYNCED_IMAGE_TEXT = "[图片未同步]";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -43,6 +44,13 @@ export function stripMeelSyncSensitiveFields(value: unknown): unknown {
   }
 
   if (isPlainObject(value)) {
+    if (value.type === "image_url") {
+      return {
+        type: "text",
+        text: UNSYNCED_IMAGE_TEXT,
+      };
+    }
+
     const clean: Record<string, unknown> = {};
 
     for (const [key, item] of Object.entries(value)) {
@@ -206,7 +214,10 @@ function normalizeSyncChatState(chatState: unknown) {
     : [];
   const currentSessionIndex =
     sessions.length > 0 && typeof chatState.currentSessionIndex === "number"
-      ? Math.min(sessions.length - 1, Math.max(0, chatState.currentSessionIndex))
+      ? Math.min(
+          sessions.length - 1,
+          Math.max(0, chatState.currentSessionIndex),
+        )
       : 0;
 
   return {

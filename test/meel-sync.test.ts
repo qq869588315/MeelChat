@@ -148,6 +148,36 @@ describe("Meel sync server helpers", () => {
     ).not.toHaveProperty("tokenCount");
   });
 
+  test("replaces unsynced image attachments with text placeholders", () => {
+    const clean = sanitizeMeelSyncState({
+      "chat-next-web-store": {
+        sessions: [
+          {
+            id: "session-with-image",
+            messages: [
+              {
+                id: "message-with-image",
+                content: [
+                  { type: "text", text: "look" },
+                  {
+                    type: "image_url",
+                    image_url: { url: "/api/cache/local-image.png" },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(clean);
+    const content = (clean["chat-next-web-store"] as any).sessions[0]
+      .messages[0].content;
+
+    expect(serialized).not.toMatch(/image_url|local-image/i);
+    expect(content).toContainEqual({ type: "text", text: "[图片未同步]" });
+  });
+
   test("stores safe wire keys while decoding back to app store keys", () => {
     const localState = sanitizeMeelSyncState({
       "chat-next-web-store": { sessions: [] },

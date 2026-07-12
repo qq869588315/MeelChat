@@ -665,6 +665,7 @@
   flex: 1;
   border-radius: 10px;
   border: var(--border-in-light);
+  position: relative;
 }
 
 .chat-input-panel-inner-attach {
@@ -684,7 +685,7 @@
   background-color: var(--white);
   color: var(--black);
   font-family: inherit;
-  padding: 10px 90px 10px 14px;
+  padding: 10px 90px 44px 14px;
   resize: none;
   outline: none;
   box-sizing: border-box;
@@ -694,13 +695,103 @@
 .chat-input:focus {
 }
 
+.attachment-input {
+  display: none;
+}
+
+.attachment-preview-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 0 0 8px;
+}
+
+.attachment-preview-image {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: rgba($color: #888, $alpha: 0.2) 1px solid;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--white);
+
+  .delete-image {
+    width: 22px;
+    height: 22px;
+    margin: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    float: right;
+    background-color: var(--white);
+    box-shadow: var(--card-shadow);
+  }
+}
+
+.attachment-preview-file {
+  height: 34px;
+  max-width: min(280px, 70vw);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: var(--border-in-light);
+  border-radius: 8px;
+  background-color: var(--white);
+  box-shadow: var(--card-shadow);
+  color: var(--black);
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  small {
+    flex: 0 0 auto;
+    opacity: 0.55;
+    font-size: 11px;
+  }
+
+  button {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    padding: 0;
+    background: transparent;
+    color: var(--black);
+    cursor: pointer;
+  }
+}
+
+.chat-input-tools {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .chat-input-send {
   background-color: var(--primary);
   color: white;
 
   position: absolute;
-  right: 30px;
-  bottom: 32px;
+  right: 8px;
+  bottom: 8px;
 }
 
 @media only screen and (max-width: 600px) {
@@ -709,7 +800,7 @@
   }
 
   .chat-input-send {
-    bottom: 30px;
+    bottom: 8px;
   }
 }
 

@@ -10,6 +10,8 @@ import React, {
 } from "react";
 
 import SendWhiteIcon from "../icons/send-white.svg";
+import ImageIcon from "../icons/image.svg";
+import UploadIcon from "../icons/upload.svg";
 import RenameIcon from "../icons/rename.svg";
 import EditIcon from "../icons/rename.svg";
 import ExportIcon from "../icons/share.svg";
@@ -32,6 +34,7 @@ import BottomIcon from "../icons/bottom.svg";
 import StopIcon from "../icons/pause.svg";
 import RobotIcon from "../icons/robot.svg";
 import {
+  ChatFileAttachment,
   ChatMessage,
   createMessage,
   DEFAULT_TOPIC,
@@ -47,10 +50,12 @@ import {
   copyToClipboard,
   getMessageImages,
   getMessageTextContent,
+  isVisionModel,
   safeLocalStorage,
   useMobileScreen,
   selectOrCopy,
 } from "../utils";
+import { uploadImage } from "../utils/chat";
 
 import dynamic from "next/dynamic";
 
@@ -102,6 +107,45 @@ const ttsPlayer = createTTSPlayer();
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
 });
+
+const MAX_ATTACH_IMAGES = 4;
+const MAX_ATTACH_FILE_BYTES = 200 * 1024;
+const MAX_ATTACH_FILE_CHARS = 20_000;
+const TEXT_FILE_RE =
+  /\.(txt|md|markdown|csv|json|jsonl|log|xml|yaml|yml|ini|conf|env|js|jsx|ts|tsx|css|scss|html|py|java|go|rs|sql|sh|bat|ps1)$/i;
+
+type PendingImageAttachment = {
+  id: string;
+  name: string;
+  url: string;
+};
+
+type PendingFileAttachment = ChatFileAttachment & {
+  id: string;
+};
+
+function createAttachmentId(file: File, index: number) {
+  return `${Date.now()}-${index}-${file.name}`;
+}
+
+function isTextLikeFile(file: File) {
+  return file.type.startsWith("text/") || TEXT_FILE_RE.test(file.name);
+}
+
+function readFileAsText(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
 
 function useSubmitHandler() {
   const config = useAppConfig();
@@ -559,7 +603,14 @@ function _Chat() {
   const [showExport, setShowExport] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [userInput, setUserInput] = useState("");
+  const [attachImages, setAttachImages] = useState<PendingImageAttachment[]>(
+    [],
+  );
+  const [attachFiles, setAttachFiles] = useState<PendingFileAttachment[]>([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { submitKey, shouldSubmit } = useSubmitHandler();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -580,7 +631,8 @@ function _Chat() {
     return topDistance < 100;
   }, [scrollRef?.current?.scrollHeight]);
 
-  const isTyping = userInput !== "";
+  const hasAttachments = attachImages.length > 0 || attachFiles.length > 0;
+  const isTyping = userInput !== "" || hasAttachments;
 
   // if user is typing, should auto scroll to bottom
   // if user is not typing, should auto scroll to bottom only if already at bottom
@@ -633,18 +685,119 @@ function _Chat() {
     setUserInput(text);
   };
 
+  const addImageFiles = async (files: File[]) => {
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    if (imageFiles.length === 0) return;
+
+    const availableSlots = MAX_ATTACH_IMAGES - attachImages.length;
+    if (availableSlots <= 0) {
+      showToast(`最多上传 ${MAX_ATTACH_IMAGES} 张图片`);
+      return;
+    }
+
+    const selectedFiles = imageFiles.slice(0, availableSlots);
+    if (selectedFiles.length < imageFiles.length) {
+      showToast(`最多上传 ${MAX_ATTACH_IMAGES} 张图片`);
+    }
+
+    setIsUploadingAttachment(true);
+    try {
+      const uploadedImages = await Promise.all(
+        selectedFiles.map(async (file, index) => ({
+          id: createAttachmentId(file, index),
+          name: file.name,
+          url: await uploadImage(file),
+        })),
+      );
+      setAttachImages((images) => images.concat(uploadedImages));
+    } catch (error: any) {
+      showToast(error?.message ?? "图片上传失败");
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  };
+
+  const addTextFiles = async (files: File[]) => {
+    const nextFiles: PendingFileAttachment[] = [];
+
+    for (const [index, file] of files.entries()) {
+      if (!isTextLikeFile(file)) {
+        showToast(`暂不支持该文件类型: ${file.name}`);
+        continue;
+      }
+
+      if (file.size > MAX_ATTACH_FILE_BYTES) {
+        showToast(`文件过大: ${file.name}`);
+        continue;
+      }
+
+      try {
+        const rawContent = await readFileAsText(file);
+        const content =
+          rawContent.length > MAX_ATTACH_FILE_CHARS
+            ? rawContent.slice(0, MAX_ATTACH_FILE_CHARS)
+            : rawContent;
+
+        if (rawContent.length > MAX_ATTACH_FILE_CHARS) {
+          showToast(`文件内容已截断: ${file.name}`);
+        }
+
+        nextFiles.push({
+          id: createAttachmentId(file, index),
+          name: file.name,
+          size: file.size,
+          content,
+        });
+      } catch (error: any) {
+        showToast(error?.message ?? `文件读取失败: ${file.name}`);
+      }
+    }
+
+    if (nextFiles.length > 0) {
+      setAttachFiles((files) => files.concat(nextFiles));
+    }
+  };
+
+  const handlePickedImages = (fileList: FileList | null) => {
+    if (!fileList) return;
+    addImageFiles(Array.from(fileList));
+  };
+
+  const handlePickedFiles = (fileList: FileList | null) => {
+    if (!fileList) return;
+    addTextFiles(Array.from(fileList));
+  };
+
   const doSubmit = (userInput: string) => {
-    if (userInput.trim() === "") return;
+    if (userInput.trim() === "" && !hasAttachments) return;
     const matchCommand = chatCommands.match(userInput);
-    if (matchCommand.matched) {
+    if (!hasAttachments && matchCommand.matched) {
       setUserInput("");
       matchCommand.invoke();
       return;
     }
+
+    if (
+      attachImages.length > 0 &&
+      !isVisionModel(session.mask.modelConfig.model)
+    ) {
+      showToast("当前模型不支持图片，请换用视觉模型");
+      return;
+    }
+
     setIsLoading(true);
-    chatStore.onUserInput(userInput, []).then(() => setIsLoading(false));
+    chatStore
+      .onUserInput(
+        userInput,
+        attachImages.map((image) => image.url),
+        false,
+        attachFiles.map(({ name, content, size }) => ({ name, content, size })),
+      )
+      .then(() => setIsLoading(false));
     chatStore.setLastInput(userInput);
     setUserInput("");
+    setAttachImages([]);
+    setAttachFiles([]);
     if (!isMobileScreen) inputRef.current?.focus();
     setAutoScroll(true);
   };
@@ -699,6 +852,22 @@ function _Chat() {
       doSubmit(userInput);
       e.preventDefault();
     }
+  };
+
+  const onInputPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.some((file) => file.type.startsWith("image/"))) {
+      e.preventDefault();
+      addImageFiles(files);
+    }
+  };
+
+  const onInputDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    addImageFiles(files);
+    addTextFiles(files.filter((file) => !file.type.startsWith("image/")));
   };
   const onRightClick = (e: any, message: ChatMessage) => {
     // copy to clipboard
@@ -1423,9 +1592,74 @@ function _Chat() {
                 scrollToBottom={scrollToBottom}
                 hitBottom={hitBottom}
               />
+              {hasAttachments && (
+                <div className={styles["attachment-preview-list"]}>
+                  {attachImages.map((image) => (
+                    <div
+                      className={styles["attachment-preview-image"]}
+                      key={image.id}
+                      style={{ backgroundImage: `url(${image.url})` }}
+                      title={image.name}
+                    >
+                      <DeleteImageButton
+                        deleteImage={() =>
+                          setAttachImages((images) =>
+                            images.filter((item) => item.id !== image.id),
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
+                  {attachFiles.map((file) => (
+                    <div
+                      className={styles["attachment-preview-file"]}
+                      key={file.id}
+                    >
+                      <UploadIcon />
+                      <span title={file.name}>{file.name}</span>
+                      <small>{formatAttachmentSize(file.size)}</small>
+                      <button
+                        type="button"
+                        aria-label="移除文件"
+                        onClick={() =>
+                          setAttachFiles((files) =>
+                            files.filter((item) => item.id !== file.id),
+                          )
+                        }
+                      >
+                        <CloseIcon />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className={styles["attachment-input"]}
+                onChange={(event) => {
+                  handlePickedImages(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.markdown,.csv,.json,.jsonl,.log,.xml,.yaml,.yml,.ini,.conf,.env,.js,.jsx,.ts,.tsx,.css,.scss,.html,.py,.java,.go,.rs,.sql,.sh,.bat,.ps1,text/*"
+                multiple
+                className={styles["attachment-input"]}
+                onChange={(event) => {
+                  handlePickedFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+              />
               <label
                 className={styles["chat-input-panel-inner"]}
                 htmlFor="chat-input"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={onInputDrop}
               >
                 <textarea
                   id="chat-input"
@@ -1435,6 +1669,7 @@ function _Chat() {
                   onInput={(e) => onInput(e.currentTarget.value)}
                   value={userInput}
                   onKeyDown={onInputKeyDown}
+                  onPaste={onInputPaste}
                   onFocus={scrollToBottom}
                   onClick={scrollToBottom}
                   rows={inputRows}
@@ -1444,6 +1679,22 @@ function _Chat() {
                     fontFamily: config.fontFamily,
                   }}
                 />
+                <div className={styles["chat-input-tools"]}>
+                  <IconButton
+                    icon={<ImageIcon />}
+                    aria={Locale.Chat.InputActions.UploadImage}
+                    title={Locale.Chat.InputActions.UploadImage}
+                    disabled={isUploadingAttachment}
+                    onClick={() => imageInputRef.current?.click()}
+                  />
+                  <IconButton
+                    icon={<UploadIcon />}
+                    aria="上传文件"
+                    title="上传文件"
+                    disabled={isUploadingAttachment}
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+                </div>
                 <IconButton
                   icon={<SendWhiteIcon />}
                   text={Locale.Chat.Send}
