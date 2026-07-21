@@ -28,6 +28,10 @@ import {
   appendOpenAICompatiblePath,
   buildOpenAICompatibleProxyTarget,
 } from "@/app/utils/openai-compatible-url";
+import {
+  parseOpenAICompatibleStreamPayload,
+  shouldUseOfficialOpenAIRequestShape,
+} from "@/app/utils/openai-compatible-response";
 import { ModelSize, DalleQuality, DalleStyle } from "@/app/typing";
 
 import {
@@ -65,10 +69,10 @@ export interface RequestPayload {
   }[];
   stream?: boolean;
   model: string;
-  temperature: number;
-  presence_penalty: number;
-  frequency_penalty: number;
-  top_p: number;
+  temperature?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  top_p?: number;
   max_tokens?: number;
   max_completion_tokens?: number;
 }
@@ -218,6 +222,13 @@ export class ChatGPTApi implements LLMApi {
       options.config.model.startsWith("o3") ||
       options.config.model.startsWith("o4-mini");
     const isGpt5 = options.config.model.startsWith("gpt-5");
+    const accessStore = useAccessStore.getState();
+    const useOfficialGpt5RequestShape =
+      isGpt5 &&
+      shouldUseOfficialOpenAIRequestShape(
+        accessStore.useCustomConfig,
+        accessStore.openaiUrl,
+      );
     if (isDalle3) {
       const prompt = getMessageTextContent(
         options.messages.slice(-1)?.pop() as any,
@@ -248,7 +259,10 @@ export class ChatGPTApi implements LLMApi {
         messages,
         stream: options.config.stream,
         model: modelConfig.model,
-        temperature: !isO1OrO3 && !isGpt5 ? modelConfig.temperature : 1,
+        temperature:
+          !isO1OrO3 && !useOfficialGpt5RequestShape
+            ? modelConfig.temperature
+            : 1,
         presence_penalty: !isO1OrO3 ? modelConfig.presence_penalty : 0,
         frequency_penalty: !isO1OrO3 ? modelConfig.frequency_penalty : 0,
         top_p: !isO1OrO3 ? modelConfig.top_p : 1,
@@ -256,7 +270,12 @@ export class ChatGPTApi implements LLMApi {
         // Please do not ask me why not send max_tokens, no reason, this param is just shit, I dont want to explain anymore.
       };
 
-      if (isGpt5) {
+      if (isGpt5 && !useOfficialGpt5RequestShape) {
+        delete requestPayload.temperature;
+        delete requestPayload.presence_penalty;
+        delete requestPayload.frequency_penalty;
+        delete requestPayload.top_p;
+      } else if (useOfficialGpt5RequestShape) {
         // Remove max_tokens if present
         delete requestPayload.max_tokens;
         // Add max_completion_tokens (or max_completion_tokens if that's what you meant)
@@ -345,7 +364,10 @@ export class ChatGPTApi implements LLMApi {
               };
             }>;
 
-            if (!choices?.length) return { isThinking: false, content: "" };
+            const parsedChunk = parseOpenAICompatibleStreamPayload(json);
+            if (parsedChunk.error) return parsedChunk;
+
+            if (!choices?.length) return parsedChunk;
 
             const tool_calls = choices[0]?.delta?.tool_calls;
             if (tool_calls?.length > 0) {
@@ -367,36 +389,7 @@ export class ChatGPTApi implements LLMApi {
               }
             }
 
-            const reasoning = choices[0]?.delta?.reasoning_content;
-            const content = choices[0]?.delta?.content;
-
-            // Skip if both content and reasoning_content are empty or null
-            if (
-              (!reasoning || reasoning.length === 0) &&
-              (!content || content.length === 0)
-            ) {
-              return {
-                isThinking: false,
-                content: "",
-              };
-            }
-
-            if (reasoning && reasoning.length > 0) {
-              return {
-                isThinking: true,
-                content: reasoning,
-              };
-            } else if (content && content.length > 0) {
-              return {
-                isThinking: false,
-                content: content,
-              };
-            }
-
-            return {
-              isThinking: false,
-              content: "",
-            };
+            return parsedChunk;
           },
           // processToolMessage, include tool_calls message and tool call results
           (

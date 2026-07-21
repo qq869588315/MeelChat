@@ -402,6 +402,7 @@ export function streamWithThink(
   ) => {
     isThinking: boolean;
     content: string | undefined;
+    error?: string;
   },
   processToolMessage: (
     requestPayload: any,
@@ -419,13 +420,14 @@ export function streamWithThink(
   let isInThinkingMode = false;
   let lastIsThinking = false;
   let lastIsThinkingTagged = false; //between <think> and </think> tags
+  let failed = false;
 
   // animate response to make it looks smooth
   function animateResponseText() {
     if (finished || controller.signal.aborted) {
       responseText += remainText;
       console.log("[Response Animation] finished");
-      if (responseText?.length === 0) {
+      if (responseText?.length === 0 && !failed) {
         options.onError?.(new Error("empty response from server"));
       }
       return;
@@ -594,6 +596,13 @@ export function streamWithThink(
         }
         try {
           const chunk = parseSSE(text, runTools);
+          if (chunk?.error) {
+            failed = true;
+            finished = true;
+            options.onError?.(new Error(chunk.error));
+            controller.abort();
+            return;
+          }
           // Skip if content is empty
           if (!chunk?.content || chunk.content.length === 0) {
             return;
