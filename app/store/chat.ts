@@ -39,6 +39,10 @@ import { createEmptyMask, Mask } from "./mask";
 import { executeMcpAction, getAllTools, isMcpEnabled } from "../mcp/actions";
 import { extractMcpJson, isMcpJson } from "../mcp/utils";
 import { markMeelSyncDirty, pushMeelSyncNow } from "../utils/meel-sync/events";
+import {
+  buildFileAttachmentText,
+  type ChatFileAttachment,
+} from "../utils/attachments";
 
 const localStorage = safeLocalStorage();
 
@@ -95,12 +99,6 @@ export interface ChatSession {
 
   mask: Mask;
 }
-
-export type ChatFileAttachment = {
-  name: string;
-  content: string;
-  size: number;
-};
 
 export const DEFAULT_TOPIC = Locale.Store.DefaultTopic;
 export const BOT_HELLO: ChatMessage = createMessage({
@@ -540,22 +538,10 @@ export const useChatStore = createPersistStore(
       ) {
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
-        const fileBlocks =
-          !isMcpResponse && attachFiles && attachFiles.length > 0
-            ? attachFiles
-                .map((file) =>
-                  [`<file name="${file.name}">`, file.content, "</file>"].join(
-                    "\n",
-                  ),
-                )
-                .join("\n\n")
-            : "";
-        const fileSummaries =
-          !isMcpResponse && attachFiles && attachFiles.length > 0
-            ? attachFiles.map((file) => `[文件未同步: ${file.name}]`).join("\n")
-            : "";
-        const requestText = [content, fileBlocks].filter(Boolean).join("\n\n");
-        const savedText = [content, fileSummaries].filter(Boolean).join("\n\n");
+        const { requestText, savedText } = buildFileAttachmentText(
+          content,
+          isMcpResponse ? [] : attachFiles,
+        );
 
         // MCP Response no need to fill template
         let requestContent: string | MultimodalContent[] = isMcpResponse

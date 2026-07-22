@@ -34,7 +34,6 @@ import BottomIcon from "../icons/bottom.svg";
 import StopIcon from "../icons/pause.svg";
 import RobotIcon from "../icons/robot.svg";
 import {
-  ChatFileAttachment,
   ChatMessage,
   createMessage,
   DEFAULT_TOPIC,
@@ -44,6 +43,7 @@ import {
   useAppConfig,
   useChatStore,
 } from "../store";
+import type { ChatFileAttachment } from "../utils/attachments";
 
 import {
   autoGrowTextArea,

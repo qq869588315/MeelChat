@@ -85,6 +85,15 @@ const targetLang = ALL_LANGS[getLang()] as LocaleType;
 // if target lang missing some fields, it will use fallback lang string
 merge(fallbackLang, targetLang);
 
+const safeUnauthorizedMessage: Partial<Record<Lang, string>> = {
+  cn: "认证失败。请检查 API 地址、API Key 或页面访问密码，然后重试。",
+  tw: "驗證失敗。請檢查 API 位址、API Key 或頁面存取密碼，然後重試。",
+};
+
+fallbackLang.Error.Unauthorized =
+  safeUnauthorizedMessage[getLang()] ??
+  "Authorization failed. Check the API URL, API key, or access password, then try again.";
+
 export default fallbackLang as LocaleType;
 
 function getItem(key: string) {
